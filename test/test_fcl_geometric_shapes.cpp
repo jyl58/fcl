@@ -464,7 +464,7 @@ void testShapeIntersection(
     std::cerr << "Invalid GJK solver. Test aborted." << std::endl;
     return;
   }
-  EXPECT_EQ(res, expected_res);
+  EXPECT_EQ(expected_res, res);
 
   // Check contact information as well
   if (solver_type == GST_LIBCCD)
@@ -480,7 +480,7 @@ void testShapeIntersection(
     std::cerr << "Invalid GJK solver. Test aborted." << std::endl;
     return;
   }
-  EXPECT_EQ(res, expected_res);
+  EXPECT_EQ(expected_res, res);
   if (expected_res)
   {
     EXPECT_TRUE(inspectContactPointds(s1, tf1, s2, tf2, solver_type,
@@ -497,13 +497,13 @@ void testShapeIntersection(
   request.enable_contact = false;
   result.clear();
   res = (collide(&s1, tf1, &s2, tf2, request, result) > 0);
-  EXPECT_EQ(res, expected_res);
+  EXPECT_EQ(expected_res, res);
 
   // Check contact information as well
   request.enable_contact = true;
   result.clear();
   res = (collide(&s1, tf1, &s2, tf2, request, result) > 0);
-  EXPECT_EQ(res, expected_res);
+  EXPECT_EQ(expected_res, res);
   if (expected_res)
   {
     getContactPointdsFromResult(actual_contacts, result);
@@ -661,6 +661,30 @@ bool compareContactPointds2(const ContactPoint<S>& cp1,const ContactPoint<S>& cp
   return cp1.pos[2] < cp2.pos[2];
 } // Ascending order
 
+// Simple aligned boxes intersecting each other
+//
+//        s2  ┌───┐
+//            │   │
+//  ┏━━━━━━━━━┿━━━┿━━━━━━━━━┓┄┄┄┄┄ z = 0
+//  ┃         │┄┄┄│┄┄┄┄┄┄┄┄┄┃┄┄┄ Reported contact depth
+//  ┃         └───┘         ┃
+//  ┃                       ┃
+//  ┃                       ┃
+//  ┃    s1                 ┃
+//  ┃                       ┃
+//  ┃                       ┃
+//  ┃                       ┃
+//  ┗━━━━━━━━━━━━━━━━━━━━━━━┛
+//
+//  s1 is a cube, 100 units to a side. Shifted downward 50 units so that it's
+//     top face is at z = 0.
+//  s2 is a box with dimensions 10, 20, 30 in the x-, y-, and z-directions,
+//     respectively. It is centered on the origin and oriented according to the
+//     provided rotation matrix `R`.
+//  The total penetration depth is the |z_max| where z_max is the z-position of
+//  the most deeply penetrating vertex on s2. The contact position will be
+//  located at -z_max / 2 (with the assumption that all penetration happens
+//  *below* the z = 0 axis.
 template <typename Derived>
 void testBoxBoxContactPointds(const Eigen::MatrixBase<Derived>& R)
 {
@@ -711,7 +735,13 @@ void testBoxBoxContactPointds(const Eigen::MatrixBase<Derived>& R)
   // We just check the deepest one as workaround.
   for (size_t i = 0; i < numContacts; ++i)
   {
-    EXPECT_TRUE(vertices[i].isApprox(contacts[i].pos));
+    // The reported contact position will lie mid-way between the deepest
+    // penetrating vertex on s2 and the z = 0 plane.
+    Vector3<S> contact_pos(vertices[i]);
+    contact_pos(2) /= 2;
+    EXPECT_TRUE(contact_pos.isApprox(contacts[i].pos))
+              << "\n\tExpected: " << contact_pos
+              << "\n\tFound:    " << contacts[i].pos;
     EXPECT_TRUE(Vector3<S>(0, 0, 1).isApprox(contacts[i].normal));
   }
 }
@@ -804,6 +834,13 @@ GTEST_TEST(FCL_GEOMETRIC_SHAPES, shapeIntersection_boxbox)
 template <typename S>
 void test_shapeIntersection_spherebox()
 {
+  // A collection of bool constants to make reading lists of bool easier.
+  const bool collides = true;
+  const bool check_position = true;
+  const bool check_depth = true;
+  const bool check_normal = true;
+  const bool check_opposite_normal = false;
+
   Sphere<S> s1(20);
   Box<S> s2(5, 5, 5);
 
@@ -817,36 +854,46 @@ void test_shapeIntersection_spherebox()
 
   tf1 = Transform3<S>::Identity();
   tf2 = Transform3<S>::Identity();
-  // TODO: Need convention for normal when the centers of two objects are at same position. The current result is (-1, 0, 0).
+  // NOTE: The centers of the box and sphere are coincident. The documented
+  // convention is that the normal is aligned with the smallest dimension of
+  // the box, pointing in the negative direction of that axis. *This* test is
+  // the driving basis for that definition.
   contacts.resize(1);
   contacts[0].normal << -1, 0, 0;
-  testShapeIntersection(s1, tf1, s2, tf2, GST_LIBCCD, true, contacts, false, false, true);
+  testShapeIntersection(s1, tf1, s2, tf2, GST_LIBCCD, collides, contacts,
+                        !check_position, !check_depth, check_normal);
 
   tf1 = transform;
   tf2 = transform;
-  // TODO: Need convention for normal when the centers of two objects are at same position.
   contacts.resize(1);
-  testShapeIntersection(s1, tf1, s2, tf2, GST_LIBCCD, true, contacts, false, false, false);
+  testShapeIntersection(s1, tf1, s2, tf2, GST_LIBCCD, collides, contacts,
+                        !check_position, !check_depth, !check_normal);
 
   tf1 = Transform3<S>::Identity();
   tf2 = Transform3<S>(Translation3<S>(Vector3<S>(22.5, 0, 0)));
-  testShapeIntersection(s1, tf1, s2, tf2, GST_LIBCCD, false);
+  // As documented in sphere_box.h, touching is considered collision, so this
+  // should produce a collision.
+  testShapeIntersection(s1, tf1, s2, tf2, GST_LIBCCD, collides, contacts,
+                        !check_position, !check_depth, !check_normal);
 
   tf1 = transform;
   tf2 = transform * Transform3<S>(Translation3<S>(Vector3<S>(22.501, 0, 0)));
-  testShapeIntersection(s1, tf1, s2, tf2, GST_LIBCCD, false);
+  testShapeIntersection(s1, tf1, s2, tf2, GST_LIBCCD, !collides);
 
   tf1 = Transform3<S>::Identity();
   tf2 = Transform3<S>(Translation3<S>(Vector3<S>(22.4, 0, 0)));
   contacts.resize(1);
   contacts[0].normal << 1, 0, 0;
-  testShapeIntersection(s1, tf1, s2, tf2, GST_LIBCCD, true, contacts, false, false, true);
+  testShapeIntersection(s1, tf1, s2, tf2, GST_LIBCCD, collides, contacts,
+                        !check_position, !check_depth, check_normal);
 
   tf1 = transform;
   tf2 = transform * Transform3<S>(Translation3<S>(Vector3<S>(22.4, 0, 0)));
   contacts.resize(1);
   contacts[0].normal = transform.linear() * Vector3<S>(1, 0, 0);
-  testShapeIntersection(s1, tf1, s2, tf2, GST_LIBCCD, true, contacts, false, false, true, false, 1e-4);
+  testShapeIntersection(s1, tf1, s2, tf2, GST_LIBCCD, collides, contacts,
+                        !check_position, !check_depth, check_normal,
+                        !check_opposite_normal, 1e-4);
 }
 
 GTEST_TEST(FCL_GEOMETRIC_SHAPES, shapeIntersection_spherebox)
@@ -4229,7 +4276,31 @@ void test_shapeIntersectionGJK_spherebox()
   tf2 = Transform3<S>(Translation3<S>(Vector3<S>(22.5, 0, 0)));
   contacts.resize(1);
   contacts[0].normal << 1, 0, 0;
-  testShapeIntersection(s1, tf1, s2, tf2, GST_INDEP, true, contacts, false, false, true, false, 1e-7);  // built-in GJK solver requires larger tolerance than libccd
+  // TODO(SeanCurtis-TRI): This osculating contact is considered a collision
+  // only for a relatively "loose" gjk tolerance. So, for this test to pass, we
+  // set and restore the default gjk tolerances. We need to determine if this is
+  // the correct/desired behavior and, if so, fix the defect that smaller
+  // tolerances prevent this from reporting as a contact. NOTE: this is *not*
+  // the same tolerance that is passed into the `testShapeIntersection` function
+  // -- which isn't actually *used*.
+  {
+    detail::GJKSolver_indep<S>& solver = solver2<S>();
+    const S old_gjk_tolerance = solver.gjk_tolerance;
+    const S old_epa_tolerance = solver.epa_tolerance;
+
+    // The historical tolerances for which this test passes.
+    solver.gjk_tolerance = 1e-6;
+    solver.epa_tolerance = 1e-6;
+
+    testShapeIntersection(s1, tf1, s2, tf2, GST_INDEP, true, contacts, false,
+                          false, true, false,
+                          1e-7 // built-in GJK solver requires larger tolerance than libccd
+    );
+    // TODO(SeanCurtis-TRI): If testShapeIntersection fails an *assert* this
+    // code will not get fired off and the static solvers will not get reset.
+    solver.gjk_tolerance = old_gjk_tolerance;
+    solver.epa_tolerance = old_epa_tolerance;
+  }
 
   tf1 = transform;
   tf2 = transform * Transform3<S>(Translation3<S>(Vector3<S>(22.51, 0, 0)));

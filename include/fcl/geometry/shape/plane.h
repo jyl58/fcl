@@ -38,6 +38,8 @@
 #ifndef FCL_SHAPE_PLANE_H
 #define FCL_SHAPE_PLANE_H
 
+#include <iostream>
+
 #include "fcl/geometry/shape/shape_base.h"
 
 namespace fcl
@@ -45,7 +47,7 @@ namespace fcl
 
 /// @brief Infinite plane 
 template <typename S_>
-class Plane : public ShapeBase<S_>
+class FCL_EXPORT Plane : public ShapeBase<S_>
 {
 public:
 
@@ -75,6 +77,12 @@ public:
   /// @brief Plane offset 
   S d;
 
+  friend
+  std::ostream& operator<<(std::ostream& out, const Plane& plane) {
+    out << "Plane(n: " << plane.n.transpose() << ", d: " << plane.d << ")";
+    return out;
+  }
+
 protected:
   
   /// @brief Turn non-unit normal into unit 
@@ -85,6 +93,7 @@ using Planef = Plane<float>;
 using Planed = Plane<double>;
 
 template <typename S>
+FCL_EXPORT
 Plane<S> transform(const Plane<S>& a, const Transform3<S>& tf);
 
 } // namespace fcl

@@ -11,10 +11,23 @@
 * Math
 
   * Switched to Eigen for math operations: [#96](https://github.com/flexible-collision-library/fcl/issues/96), [#150](https://github.com/flexible-collision-library/fcl/pull/150)
+  * fcl::Transform defined to be an Isometry to facilitate inverses [#318](https://github.com/flexible-collision-library/fcl/pull/318)
+
+* Geometry
+
+  * Simplified Convex class, deprecating old constructor in favor of
+    simpler, documented constructor:
+     [#325](https://github.com/flexible-collision-library/fcl/pull/325),
+     [#338](https://github.com/flexible-collision-library/fcl/pull/338)
 
 * Broadphase
 
   * Fixed redundant pair checking of SpatialHashingCollisionManager: [#156](https://github.com/flexible-collision-library/fcl/pull/156)
+
+* Narrowphase
+
+  * Add custom sphere-box collision and distance algorithms for both solvers: [#316](https://github.com/flexible-collision-library/fcl/pull/316)
+  * Add custom sphere-cylinder collision and distance algorithms for both solvers: [#321](https://github.com/flexible-collision-library/fcl/pull/321)
 
 * Distance
 
@@ -26,6 +39,7 @@
   * Added CMake targets for generating API documentation: [#174](https://github.com/flexible-collision-library/fcl/pull/174)
   * Enabled build with SSE option by default: [#159](https://github.com/flexible-collision-library/fcl/pull/159)
   * Added missing copyright headers:  [#149](https://github.com/flexible-collision-library/fcl/pull/149)
+  * Added test utility for performing equality between Eigen matrix-types (`CompareMatrices` in `test/eign_matrix_compare.h`): [#316](https://github.com/flexible-collision-library/fcl/pull/316)
 
 ### FCL 0.5.0 (2016-07-19)
 

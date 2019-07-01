@@ -63,6 +63,7 @@ struct MinkowskiDiff<double>;
 
 //==============================================================================
 template <typename S, typename Derived>
+FCL_EXPORT
 Vector3<S> getSupport(
     const ShapeBase<S>* shape,
     const Eigen::MatrixBase<Derived>& dir)
@@ -182,14 +183,13 @@ Vector3<S> getSupport(
     {
       const Convex<S>* convex = static_cast<const Convex<S>*>(shape);
       S maxdot = - std::numeric_limits<S>::max();
-      Vector3<S>* curp = convex->points;
       Vector3<S> bestv = Vector3<S>::Zero();
-      for(int i = 0; i < convex->num_points; ++i, curp+=1)
+      for(const auto& vertex : convex->getVertices())
       {
-        S dot = dir.dot(*curp);
+        S dot = dir.dot(vertex);
         if(dot > maxdot)
         {
-          bestv = *curp;
+          bestv = vertex;
           maxdot = dot;
         }
       }

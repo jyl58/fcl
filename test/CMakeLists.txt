@@ -38,6 +38,7 @@ target_link_libraries(test_fcl_utility fcl)
 # test file list
 set(tests
     test_fcl_auto_diff.cpp
+    test_fcl_box_box.cpp
     test_fcl_broadphase_collision_1.cpp
     test_fcl_broadphase_collision_2.cpp
     test_fcl_broadphase_distance.cpp
@@ -45,17 +46,23 @@ set(tests
     test_fcl_capsule_box_1.cpp
     test_fcl_capsule_box_2.cpp
     test_fcl_capsule_capsule.cpp
+    test_fcl_cylinder_half_space.cpp
     test_fcl_collision.cpp
+    test_fcl_constant_eps.cpp
     test_fcl_distance.cpp
     test_fcl_frontlist.cpp
     test_fcl_general.cpp
+    test_fcl_generate_bvh_model_deferred_finalize.cpp
     test_fcl_geometric_shapes.cpp
     test_fcl_math.cpp
     test_fcl_profiler.cpp
     test_fcl_shape_mesh_consistency.cpp
     test_fcl_signed_distance.cpp
     test_fcl_simple.cpp
+    test_fcl_sphere_box.cpp
     test_fcl_sphere_capsule.cpp
+    test_fcl_sphere_cylinder.cpp
+    test_fcl_sphere_sphere.cpp
 )
 
 if (FCL_HAVE_OCTOMAP)
@@ -89,3 +96,6 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 foreach(test ${tests})
   add_fcl_test(${test})
 endforeach(test)
+
+add_subdirectory(geometry)
+add_subdirectory(narrowphase)

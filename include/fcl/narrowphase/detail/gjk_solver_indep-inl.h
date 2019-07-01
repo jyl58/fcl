@@ -49,12 +49,15 @@
 #include "fcl/narrowphase/detail/convexity_based_algorithm/gjk.h"
 #include "fcl/narrowphase/detail/convexity_based_algorithm/epa.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/capsule_capsule.h"
+#include "fcl/narrowphase/detail/primitive_shape_algorithm/sphere_box.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/sphere_capsule.h"
+#include "fcl/narrowphase/detail/primitive_shape_algorithm/sphere_cylinder.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/sphere_sphere.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/sphere_triangle.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/box_box.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/halfspace.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/plane.h"
+#include "fcl/narrowphase/detail/failed_at_this_configuration.h"
 
 namespace fcl
 {
@@ -181,9 +184,9 @@ bool GJKSolver_indep<S>::shapeIntersect(
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
 // |            | box | sphere | ellipsoid | capsule | cone | cylinder | plane | half-space | triangle |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
-// | box        |  O  |        |           |         |      |          |   O   |      O     |          |
+// | box        |  O  |   O    |           |         |      |          |   O   |      O     |          |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
-// | sphere     |/////|   O    |           |    O    |      |          |   O   |      O     |     O    |
+// | sphere     |/////|   O    |           |    O    |      |    O     |   O   |      O     |     O    |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
 // | ellipsoid  |/////|////////|           |         |      |          |   O   |      O     |          |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
@@ -245,6 +248,10 @@ FCL_GJK_INDEP_SHAPE_INTERSECT(Sphere, detail::sphereSphereIntersect)
 FCL_GJK_INDEP_SHAPE_INTERSECT(Box, detail::boxBoxIntersect)
 
 FCL_GJK_INDEP_SHAPE_SHAPE_INTERSECT(Sphere, Capsule, detail::sphereCapsuleIntersect)
+
+FCL_GJK_INDEP_SHAPE_SHAPE_INTERSECT(Sphere, Box, detail::sphereBoxIntersect)
+
+FCL_GJK_INDEP_SHAPE_SHAPE_INTERSECT(Sphere, Cylinder, detail::sphereCylinderIntersect)
 
 FCL_GJK_INDEP_SHAPE_SHAPE_INTERSECT(Sphere, Halfspace, detail::sphereHalfspaceIntersect)
 FCL_GJK_INDEP_SHAPE_SHAPE_INTERSECT(Ellipsoid, Halfspace, detail::ellipsoidHalfspaceIntersect)
@@ -619,8 +626,10 @@ struct ShapeDistanceIndepImpl
 
       if(distance) *distance = (w0 - w1).norm();
 
-      if(p1) *p1 = w0;
-      if(p2) (*p2).noalias() = shape.toshape0.inverse() * w1;
+      // Answer is solved in Shape1's local frame; answers are given in the
+      // world frame.
+      if(p1) p1->noalias() = tf1 * w0;
+      if(p2) p2->noalias() = tf1 * w1;
 
       return true;
     }
@@ -661,8 +670,14 @@ bool GJKSolver_indep<S>::shapeSignedDistance(
     Vector3<S>* p2) const
 {
   // TODO: should implement the signed distance version
-  return ShapeDistanceIndepImpl<S, Shape1, Shape2>::run(
+  bool result = false;
+  try {
+    result = ShapeDistanceIndepImpl<S, Shape1, Shape2>::run(
         *this, s1, tf1, s2, tf2, dist, p1, p2);
+  } catch (const FailedAtThisConfiguration& e) {
+    ThrowDetailedConfiguration(s1, tf1, s2, tf2, *this, e);
+  }
+  return result;
 }
 
 // Shape distance algorithms not using built-in GJK algorithm
@@ -670,9 +685,9 @@ bool GJKSolver_indep<S>::shapeSignedDistance(
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
 // |            | box | sphere | ellipsoid | capsule | cone | cylinder | plane | half-space | triangle |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
-// | box        |     |        |           |         |      |          |       |            |          |
+// | box        |     |   O    |           |         |      |          |       |            |          |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
-// | sphere     |/////|   O    |           |    O    |      |          |       |            |     O    |
+// | sphere     |/////|   O    |           |    O    |      |    O     |       |            |     O    |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
 // | ellipsoid  |/////|////////|           |         |      |          |       |            |          |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
@@ -688,6 +703,42 @@ bool GJKSolver_indep<S>::shapeSignedDistance(
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
 // | triangle   |/////|////////|///////////|/////////|//////|//////////|///////|////////////|          |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
+
+//==============================================================================
+template<typename S>
+struct ShapeDistanceIndepImpl<S, Sphere<S>, Box<S>>
+{
+  static bool run(
+      const GJKSolver_indep<S>& /*gjkSolver*/,
+      const Sphere<S>& s1,
+      const Transform3<S>& tf1,
+      const Box<S>& s2,
+      const Transform3<S>& tf2,
+      S* dist,
+      Vector3<S>* p1,
+      Vector3<S>* p2)
+  {
+    return detail::sphereBoxDistance(s1, tf1, s2, tf2, dist, p1, p2);
+  }
+};
+
+//==============================================================================
+template<typename S>
+struct ShapeDistanceIndepImpl<S, Box<S>, Sphere<S>>
+{
+  static bool run(
+      const GJKSolver_indep<S>& /*gjkSolver*/,
+      const Box<S>& s1,
+      const Transform3<S>& tf1,
+      const Sphere<S>& s2,
+      const Transform3<S>& tf2,
+      S* dist,
+      Vector3<S>* p1,
+      Vector3<S>* p2)
+  {
+    return detail::sphereBoxDistance(s2, tf2, s1, tf1, dist, p2, p1);
+  }
+};
 
 //==============================================================================
 template<typename S>
@@ -722,6 +773,42 @@ struct ShapeDistanceIndepImpl<S, Capsule<S>, Sphere<S>>
       Vector3<S>* p2)
   {
     return detail::sphereCapsuleDistance(s2, tf2, s1, tf1, dist, p2, p1);
+  }
+};
+
+//==============================================================================
+template<typename S>
+struct ShapeDistanceIndepImpl<S, Sphere<S>, Cylinder<S>>
+{
+  static bool run(
+      const GJKSolver_indep<S>& /*gjkSolver*/,
+      const Sphere<S>& s1,
+      const Transform3<S>& tf1,
+      const Cylinder<S>& s2,
+      const Transform3<S>& tf2,
+      S* dist,
+      Vector3<S>* p1,
+      Vector3<S>* p2)
+  {
+    return detail::sphereCylinderDistance(s1, tf1, s2, tf2, dist, p1, p2);
+  }
+};
+
+//==============================================================================
+template<typename S>
+struct ShapeDistanceIndepImpl<S, Cylinder<S>, Sphere<S>>
+{
+  static bool run(
+      const GJKSolver_indep<S>& /*gjkSolver*/,
+      const Cylinder<S>& s1,
+      const Transform3<S>& tf1,
+      const Sphere<S>& s2,
+      const Transform3<S>& tf2,
+      S* dist,
+      Vector3<S>* p1,
+      Vector3<S>* p2)
+  {
+    return detail::sphereCylinderDistance(s2, tf2, s1, tf1, dist, p2, p1);
   }
 };
 
@@ -802,8 +889,9 @@ struct ShapeTriangleDistanceIndepImpl
       }
 
       if(distance) *distance = (w0 - w1).norm();
+      // The answers are produced in world coordinates. Keep them there.
       if(p1) *p1 = w0;
-      if(p2) (*p2).noalias() = shape.toshape0 * w1;
+      if(p2) *p2 = w1;
       return true;
     }
     else
@@ -892,8 +980,8 @@ struct ShapeTransformedTriangleDistanceIndepImpl
       }
 
       if(distance) *distance = (w0 - w1).norm();
-      if(p1) *p1 = w0;
-      if(p2) (*p2).noalias() = shape.toshape0 * w1;
+      if(p1) p1->noalias() = tf1 * w0;
+      if(p2) p2->noalias() = tf1 * w1;
       return true;
     }
     else
@@ -948,11 +1036,11 @@ template <typename S>
 GJKSolver_indep<S>::GJKSolver_indep()
 {
   gjk_max_iterations = 128;
-  gjk_tolerance = 1e-6;
+  gjk_tolerance = constants<S>::gjk_default_tolerance();
   epa_max_face_num = 128;
   epa_max_vertex_num = 64;
   epa_max_iterations = 255;
-  epa_tolerance = 1e-6;
+  epa_tolerance = constants<S>::gjk_default_tolerance();
   enable_cached_guess = false;
   cached_guess = Vector3<S>(1, 0, 0);
 }

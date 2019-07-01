@@ -46,12 +46,15 @@
 
 #include "fcl/narrowphase/detail/convexity_based_algorithm/gjk_libccd.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/capsule_capsule.h"
+#include "fcl/narrowphase/detail/primitive_shape_algorithm/sphere_box.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/sphere_capsule.h"
+#include "fcl/narrowphase/detail/primitive_shape_algorithm/sphere_cylinder.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/sphere_sphere.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/sphere_triangle.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/box_box.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/halfspace.h"
 #include "fcl/narrowphase/detail/primitive_shape_algorithm/plane.h"
+#include "fcl/narrowphase/detail/failed_at_this_configuration.h"
 
 namespace fcl
 {
@@ -177,9 +180,9 @@ bool GJKSolver_libccd<S>::shapeIntersect(
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
 // |            | box | sphere | ellipsoid | capsule | cone | cylinder | plane | half-space | triangle |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
-// | box        |  O  |        |           |         |      |          |   O   |      O     |          |
+// | box        |  O  |   O    |           |         |      |          |   O   |      O     |          |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
-// | sphere     |/////|   O    |           |    O    |      |          |   O   |      O     |    O     |
+// | sphere     |/////|   O    |           |    O    |      |    O     |   O   |      O     |    O     |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
 // | ellipsoid  |/////|////////|           |         |      |          |   O   |      O     |   TODO   |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
@@ -241,6 +244,10 @@ FCL_GJK_LIBCCD_SHAPE_INTERSECT(Sphere, detail::sphereSphereIntersect)
 FCL_GJK_LIBCCD_SHAPE_INTERSECT(Box, detail::boxBoxIntersect)
 
 FCL_GJK_LIBCCD_SHAPE_SHAPE_INTERSECT(Sphere, Capsule, detail::sphereCapsuleIntersect)
+
+FCL_GJK_LIBCCD_SHAPE_SHAPE_INTERSECT(Sphere, Box, detail::sphereBoxIntersect)
+
+FCL_GJK_LIBCCD_SHAPE_SHAPE_INTERSECT(Sphere, Cylinder, detail::sphereCylinderIntersect)
 
 FCL_GJK_LIBCCD_SHAPE_SHAPE_INTERSECT(Sphere, Halfspace, detail::sphereHalfspaceIntersect)
 FCL_GJK_LIBCCD_SHAPE_SHAPE_INTERSECT(Ellipsoid, Halfspace, detail::ellipsoidHalfspaceIntersect)
@@ -550,7 +557,7 @@ struct ShapeSignedDistanceLibccdImpl
     void* o1 = detail::GJKInitializer<S, Shape1>::createGJKObject(s1, tf1);
     void* o2 = detail::GJKInitializer<S, Shape2>::createGJKObject(s2, tf2);
 
-    bool res =  detail::GJKSignedDistance(
+    bool res = detail::GJKSignedDistance(
           o1,
           detail::GJKInitializer<S, Shape1>::getSupportFunction(),
           o2,
@@ -560,12 +567,6 @@ struct ShapeSignedDistanceLibccdImpl
           dist,
           p1,
           p2);
-
-    if (p1)
-      (*p1).noalias() = tf1.inverse(Eigen::Isometry) * *p1;
-
-    if (p2)
-      (*p2).noalias() = tf2.inverse(Eigen::Isometry) * *p2;
 
     detail::GJKInitializer<S, Shape1>::deleteGJKObject(o1);
     detail::GJKInitializer<S, Shape2>::deleteGJKObject(o2);
@@ -585,8 +586,14 @@ bool GJKSolver_libccd<S>::shapeSignedDistance(
     Vector3<S>* p1,
     Vector3<S>* p2) const
 {
-  return ShapeSignedDistanceLibccdImpl<S, Shape1, Shape2>::run(
+  bool result = false;
+  try {
+    result = ShapeSignedDistanceLibccdImpl<S, Shape1, Shape2>::run(
         *this, s1, tf1, s2, tf2, dist, p1, p2);
+  } catch (const FailedAtThisConfiguration& e) {
+    ThrowDetailedConfiguration(s1, tf1, s2, tf2, *this, e);
+  }
+  return result;
 }
 
 
@@ -618,12 +625,6 @@ struct ShapeDistanceLibccdImpl
           p1,
           p2);
 
-    if (p1)
-      (*p1).noalias() = tf1.inverse(Eigen::Isometry) * *p1;
-
-    if (p2)
-      (*p2).noalias() = tf2.inverse(Eigen::Isometry) * *p2;
-
     detail::GJKInitializer<S, Shape1>::deleteGJKObject(o1);
     detail::GJKInitializer<S, Shape2>::deleteGJKObject(o2);
 
@@ -651,9 +652,9 @@ bool GJKSolver_libccd<S>::shapeDistance(
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
 // |            | box | sphere | ellipsoid | capsule | cone | cylinder | plane | half-space | triangle |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
-// | box        |     |        |           |         |      |          |       |            |          |
+// | box        |     |   O    |           |         |      |          |       |            |          |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
-// | sphere     |/////|   O    |           |    O    |      |          |       |            |     O    |
+// | sphere     |/////|   O    |           |    O    |      |    O     |       |            |     O    |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
 // | ellipsoid  |/////|////////|           |         |      |          |       |            |          |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
@@ -669,6 +670,42 @@ bool GJKSolver_libccd<S>::shapeDistance(
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
 // | triangle   |/////|////////|///////////|/////////|//////|//////////|///////|////////////|          |
 // +------------+-----+--------+-----------+---------+------+----------+-------+------------+----------+
+
+//==============================================================================
+template<typename S>
+struct ShapeDistanceLibccdImpl<S, Sphere<S>, Box<S>>
+{
+  static bool run(
+      const GJKSolver_libccd<S>& /*gjkSolver*/,
+      const Sphere<S>& s1,
+      const Transform3<S>& tf1,
+      const Box<S>& s2,
+      const Transform3<S>& tf2,
+      S* dist,
+      Vector3<S>* p1,
+      Vector3<S>* p2)
+  {
+    return detail::sphereBoxDistance(s1, tf1, s2, tf2, dist, p1, p2);
+  }
+};
+
+//==============================================================================
+template<typename S>
+struct ShapeDistanceLibccdImpl<S, Box<S>, Sphere<S>>
+{
+  static bool run(
+      const GJKSolver_libccd<S>& /*gjkSolver*/,
+      const Box<S>& s1,
+      const Transform3<S>& tf1,
+      const Sphere<S>& s2,
+      const Transform3<S>& tf2,
+      S* dist,
+      Vector3<S>* p1,
+      Vector3<S>* p2)
+  {
+    return detail::sphereBoxDistance(s2, tf2, s1, tf1, dist, p2, p1);
+  }
+};
 
 //==============================================================================
 template<typename S>
@@ -703,6 +740,42 @@ struct ShapeDistanceLibccdImpl<S, Capsule<S>, Sphere<S>>
       Vector3<S>* p2)
   {
     return detail::sphereCapsuleDistance(s2, tf2, s1, tf1, dist, p2, p1);
+  }
+};
+
+//==============================================================================
+template<typename S>
+struct ShapeDistanceLibccdImpl<S, Sphere<S>, Cylinder<S>>
+{
+  static bool run(
+      const GJKSolver_libccd<S>& /*gjkSolver*/,
+      const Sphere<S>& s1,
+      const Transform3<S>& tf1,
+      const Cylinder<S>& s2,
+      const Transform3<S>& tf2,
+      S* dist,
+      Vector3<S>* p1,
+      Vector3<S>* p2)
+  {
+    return detail::sphereCylinderDistance(s1, tf1, s2, tf2, dist, p1, p2);
+  }
+};
+
+//==============================================================================
+template<typename S>
+struct ShapeDistanceLibccdImpl<S, Cylinder<S>, Sphere<S>>
+{
+  static bool run(
+      const GJKSolver_libccd<S>& /*gjkSolver*/,
+      const Cylinder<S>& s1,
+      const Transform3<S>& tf1,
+      const Sphere<S>& s2,
+      const Transform3<S>& tf2,
+      S* dist,
+      Vector3<S>* p1,
+      Vector3<S>* p2)
+  {
+    return detail::sphereCylinderDistance(s2, tf2, s1, tf1, dist, p2, p1);
   }
 };
 
@@ -770,8 +843,6 @@ struct ShapeTriangleDistanceLibccdImpl
           dist,
           p1,
           p2);
-    if(p1)
-      (*p1).noalias() = tf.inverse(Eigen::Isometry) * *p1;
 
     detail::GJKInitializer<S, Shape>::deleteGJKObject(o1);
     detail::triDeleteGJKObject(o2);
@@ -845,10 +916,6 @@ struct ShapeTransformedTriangleDistanceLibccdImpl
           dist,
           p1,
           p2);
-    if(p1)
-      (*p1).noalias() = tf1.inverse(Eigen::Isometry) * *p1;
-    if(p2)
-      (*p2).noalias() = tf2.inverse(Eigen::Isometry) * *p2;
 
     detail::GJKInitializer<S, Shape>::deleteGJKObject(o1);
     detail::triDeleteGJKObject(o2);
@@ -902,7 +969,7 @@ GJKSolver_libccd<S>::GJKSolver_libccd()
 {
   max_collision_iterations = 500;
   max_distance_iterations = 1000;
-  collision_tolerance = 1e-6;
+  collision_tolerance = constants<S>::gjk_default_tolerance();
   distance_tolerance = 1e-6;
 }
 

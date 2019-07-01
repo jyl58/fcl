@@ -40,12 +40,14 @@
 
 #include "fcl/geometry/shape/shape_base.h"
 
+#include <iostream>
+
 namespace fcl
 {
 
 /// @brief Center at zero point sphere
 template <typename S_>
-class Sphere : public ShapeBase<S_>
+class FCL_EXPORT Sphere : public ShapeBase<S_>
 {
 public:
 
@@ -69,6 +71,12 @@ public:
   /// @brief get the vertices of some convex shape which can bound this shape in
   /// a specific configuration
   std::vector<Vector3<S>> getBoundVertices(const Transform3<S>& tf) const;
+
+  friend
+  std::ostream& operator<<(std::ostream& out, const Sphere& sphere) {
+    out << "Sphere(" << sphere.radius << ")";
+    return out;
+  }
 };
 
 using Spheref = Sphere<float>;

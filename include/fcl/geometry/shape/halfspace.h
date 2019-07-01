@@ -38,6 +38,8 @@
 #ifndef FCL_SHAPE_HALFSPACE_H
 #define FCL_SHAPE_HALFSPACE_H
 
+#include <iostream>
+
 #include "fcl/geometry/shape/shape_base.h"
 #include "fcl/math/bv/OBB.h"
 #include "fcl/math/bv/RSS.h"
@@ -52,7 +54,7 @@ namespace fcl
 /// Points in the negative side of the separation plane (i.e. {x | n * x < d}) are inside the half space and points
 /// in the positive side of the separation plane (i.e. {x | n * x > d}) are outside the half space
 template <typename S_>
-class Halfspace : public ShapeBase<S_>
+class FCL_EXPORT Halfspace : public ShapeBase<S_>
 {
 public:
 
@@ -82,6 +84,13 @@ public:
   /// @brief Planed offset
   S d;
 
+  friend
+  std::ostream& operator<<(std::ostream& out, const Halfspace& halfspace) {
+    out << "Halfspace(n: " << halfspace.n.transpose() << ", d: "
+        << halfspace.d << ")";
+    return out;
+  }
+
 protected:
 
   /// @brief Turn non-unit normal into unit
@@ -92,6 +101,7 @@ using Halfspacef = Halfspace<float>;
 using Halfspaced = Halfspace<double>;
 
 template <typename S>
+FCL_EXPORT
 Halfspace<S> transform(const Halfspace<S>& a, const Transform3<S>& tf);
 
 } // namespace fcl

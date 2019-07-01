@@ -1,7 +1,7 @@
 /*
  * Software License Agreement (BSD License)
  *
- *  Copyright (c) 2013-2016, CNRS-LAAS and AIST
+ *  Copyright (c) 2018. Toyota Research Institute
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -32,36 +32,29 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  */
 
-/// @author Florent Lamiraux
+/** @author Sean Curtis (sean@tri.global) (2018) */
 
-#ifndef FCL_DEPRECATED_HH
-# define FCL_DEPRECATED_HH
+#include "fcl/narrowphase/detail/primitive_shape_algorithm/sphere_box-inl.h"
 
-// Define a suffix which can be used to tag a type, a function or a a
-// variable as deprecated (i.e. it will emit a warning when using it).
-//
-// Tagging a function as deprecated:
-//  FCL_DEPRECATED void foo ();
-//
-// Tagging a type as deprecated:
-//  FCL_DEPRECATED class Foo {};
-//
-// Tagging a variable as deprecated:
-//  FCL_DEPRECATED int a = 0;
-//
-// The use of a macro is required as this is /not/ a standardized
-// feature of C++ language or preprocessor, even if most of the
-// compilers support it.
-# ifdef __GNUC__
-#  define FCL_DEPRECATED __attribute__ ((deprecated))
-# elif defined _MSC_VER
-#  define FCL_DEPRECATED __declspec (deprecated)
-# elif defined(clang)
-#  define FL_DEPRECATED \
-  attribute((deprecated("FCL: Use of this method is deprecated")))
-# else
-// If the compiler is not recognized, drop the feature.
-#  define FCL_DEPRECATED /* nothing */
-# endif
+namespace fcl
+{
 
-#endif //! FCL_DEPRECATED_HH
+namespace detail
+{
+
+//==============================================================================
+template bool
+sphereBoxIntersect(const Sphere<double>& sphere, const Transform3<double>& X_FS,
+                   const Box<double>& box, const Transform3<double>& X_FB,
+                   std::vector<ContactPoint<double>>* contacts);
+
+//==============================================================================
+
+template bool
+sphereBoxDistance(const Sphere<double>& sphere, const Transform3<double>& X_FS,
+                  const Box<double>& box, const Transform3<double>& X_FB,
+                  double* distance, Vector3<double>* p_FSb,
+                  Vector3<double>* p_FBs);
+
+} // namespace detail
+} // namespace fcl

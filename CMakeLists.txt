@@ -1,33 +1,68 @@
+# -*- mode: cmake -*-
+# vi: set ft=cmake :
+
+# Copyright (c) 2012, Willow Garage, Inc.
+# Copyright (c) 2016, Toyota Research Institute, Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# * Redistributions of source code must retain the above copyright notice, this
+#   list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+#
+# * Neither the name of the copyright holder nor the names of its
+#   contributors may be used to endorse or promote products derived from
+#   this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
 if(APPLE)
-  cmake_minimum_required(VERSION 3.0.00)
+  cmake_minimum_required(VERSION 3.0.0)
 elseif(MSVC)
   cmake_minimum_required(VERSION 3.1.3)
 else()
   cmake_minimum_required(VERSION 2.8.12)
 endif()
 
-# Set the CMAKE_CXX_COMPILER_ID variable to AppleClang instead of Clang.
-# AppleClang and Clang have different version number. This was introduced in
-# CMake 3.0.
+project(fcl CXX)
+
+# Compiler ID for Apple Clang is now AppleClang.
 if(POLICY CMP0025)
   cmake_policy(SET CMP0025 NEW)
 endif()
 
-# Use MACOSX_RPATH by default on OS X. This was added in CMake 2.8.12 and
-# became default in CMake 3.0. Explicitly setting this policy is necessary to
-# suppress a warning in CMake 3.0 and above.
-if(POLICY CMP0042)
-  cmake_policy(SET CMP0042 NEW)
-endif()
+include(CTest)
 
-project(fcl CXX C)
+configure_file(CTestCustom.cmake.in CTestCustom.cmake @ONLY)
 
 option(FCL_ENABLE_PROFILING "Enable profiling" OFF)
 option(FCL_TREAT_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
+# Option for some bundle-like build system in order not to expose
+# any FCL binary symbols in their public ABI
+option(FCL_HIDE_ALL_SYMBOLS "Hide all binary symbols" OFF)
 
 # set the default build type
-if (NOT MSVC AND NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING
+    "Choose the type of build; options are Debug Release RelWithDebInfo MinSizeRel."
+    FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY
+    STRINGS Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
 # This shouldn't be necessary, but there has been trouble
@@ -38,10 +73,11 @@ endif (MSVC OR MSVC90 OR MSVC10)
 
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMakeModules")
+include(GenerateExportHeader)
+include(GNUInstallDirs)
 include(FCLMacros)
 include(CompilerSettings)
 include(FCLVersion)
-include(GNUInstallDirs)
 
 if(MSVC OR IS_ICPC)
   option(FCL_STATIC_LIBRARY "Whether the FCL library should be static rather than shared" ON)
@@ -160,7 +196,7 @@ if(NOT ccd_FOUND)
 endif()
 
 if(NOT ccd_FOUND)
-  message(FATAL_ERROR "CCD (>= 3.0.5) is required by FCL")
+  message(FATAL_ERROR "CCD is required by FCL")
 endif()
 
 set(PKG_EXTERNAL_DEPS "ccd eigen3")
@@ -229,13 +265,12 @@ else()
   message(STATUS "FCL does not use OctoMap (as requested)")
 endif()
 
-
 # FCL's own include dir should be at the front of the include path
 include_directories(BEFORE "include")
 include_directories(BEFORE "${CMAKE_CURRENT_BINARY_DIR}/include")
 
-add_subdirectory(include/fcl)
 add_subdirectory(src)
+add_subdirectory(include/fcl)
 
 set(pkg_conf_file_in "${CMAKE_CURRENT_SOURCE_DIR}/fcl.pc.in")
 set(pkg_conf_file_out "${CMAKE_CURRENT_BINARY_DIR}/fcl.pc")
@@ -260,9 +295,20 @@ configure_file(
 add_custom_target(uninstall
   "${CMAKE_COMMAND}" -P "${CMAKE_CURRENT_BINARY_DIR}/CMakeModules/cmake_uninstall.cmake")
 
-option(FCL_BUILD_TESTS "Build FCL tests" ON)
-if(FCL_BUILD_TESTS)
-    enable_testing()
+set(FCL_BUILD_TESTS "DEFAULT" CACHE INTERNAL "Deprecated; use BUILD_TESTING instead.")
+
+if(NOT FCL_BUILD_TESTS STREQUAL "DEFAULT")
+  message(DEPRECATION "FCL_BUILD_TESTS is deprecated; use BUILD_TESTING instead.")
+  if(FCL_BUILD_TESTS)
+    set(_BUILD_TESTING ON)
+  else()
+    set(_BUILD_TESTING OFF)
+  endif()
+  set(BUILD_TESTING ${_BUILD_TESTING} CACHE BOOL "Build the testing tree." FORCE)
+  unset(_BUILD_TESTING)
+endif()
+
+if(BUILD_TESTING AND NOT FCL_HIDE_ALL_SYMBOLS)
     add_subdirectory(test)
 endif()
 

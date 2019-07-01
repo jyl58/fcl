@@ -38,7 +38,8 @@
 #ifndef FCL_NARROWPHASE_GJKSOLVERLIBCCD_H
 #define FCL_NARROWPHASE_GJKSOLVERLIBCCD_H
 
-#include "fcl/common/deprecated.h"
+#include <iostream>
+
 #include "fcl/common/types.h"
 #include "fcl/narrowphase/contact_point.h"
 
@@ -50,7 +51,7 @@ namespace detail
 
 /// @brief collision and distance solver based on libccd library.
 template <typename S_>
-struct GJKSolver_libccd
+struct FCL_EXPORT GJKSolver_libccd
 {
   using S = S_;
 
@@ -168,6 +169,17 @@ struct GJKSolver_libccd
 
   /// @brief the threshold used in GJK algorithm to stop distance iteration
   S distance_tolerance;
+
+  friend
+  std::ostream& operator<<(std::ostream& out, const GJKSolver_libccd& solver) {
+    out << "GjkSolver_libccd"
+        << "\n    collision_tolerance:      " << solver.collision_tolerance
+        << "\n    max collision iterations: " << solver.max_collision_iterations
+        << "\n    distance tolerance:       " << solver.distance_tolerance
+        << "\n    max distance iterations:  " << solver.max_distance_iterations;
+    // NOTE: Cached guesses are not supported.
+    return out;
+  }
 
 };
 
